@@ -1,0 +1,10 @@
+# Python virtual environment
+venv/*
+
+# C object/executable files
+*.o
+
+lookt
+randt
+servt
+agent
