@@ -17,15 +17,43 @@ import numpy as np # type: ignore
 # Game state/model
 #
 
-boards = np.zeros((10, 10), dtype="int8")
+boards = np.zeros((10, 10), dtype="int8") # 0-th index ignored
 s = [".","X","O"]
 curr = 0 
+
+start_indices = [(1, 1), (1, 4), (1, 7), \
+                 (4, 1), (4, 4), (4, 7), \
+                 (7, 1), (7, 4), (7, 7)]
+
+def get_board(n):
+    i, j = start_indices[n]
+    return boards[i: i + 3, j: j + 3]
 
 #
 # Static evaluation of game state
 #
 
+# (0, 0), (0, 1), (0, 2)
+# (1, 0), (1, 1), (1, 2)
+# (2, 0), (2, 1), (2, 2)
 
+triplets = [[(0, 0), (0, 1), (0, 2)], [(1, 0), (1, 1), (1, 2)], [(2, 0), (2, 1), (2, 2)], \
+            [(0, 0), (1, 0), (2, 0)], [(0, 1), (1, 1), (2, 1)], [(0, 2), (1, 2), (2, 2)], \
+            [(0, 0), (1, 1), (2, 2)], [(0, 2), (1, 1), (2, 0)]]
+
+def check_board_winner(n):
+    board = get_board(n)
+    for tri in triplets:
+        i1, j1 = tri[0]
+        i2, j2 = tri[1]
+        i3, j3 = tri[2]
+
+        if (board[i1, j1] == board[i2, j2] and \
+            board[i2, j2] == board[i3, j3] and \
+            board[i3, j3] == board[i1, j1]):
+            return board[i1, j1]
+        
+    return 0
 
 #
 # Minimax algorithm w/ alpha-beta pruning
