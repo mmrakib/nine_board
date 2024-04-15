@@ -1,12 +1,18 @@
 #!/usr/bin/python3
-#  agent.py
-#  Nine-Board Tic-Tac-Toe Agent starter code
-#  COMP3411/9814 Artificial Intelligence
-#  CSE, UNSW
+
+# File: agent.py 
+# Course: COMP3411/9814 Artificial Intelligence
+# Assessment: Assignment 3 - Nine-Board Tic-Tac-Toe Agent
+# Author: Mohammad Mayaz Rakib
+# zID: z5361151
 
 import socket
 import sys
 import numpy as np
+
+#
+# Game state/model
+#
 
 # a board cell can hold:
 #   0 - Empty
@@ -17,6 +23,45 @@ import numpy as np
 boards = np.zeros((10, 10), dtype="int8")
 s = [".","X","O"]
 curr = 0 # this is the current board to play in
+
+#
+# Static evaluation of game state
+#
+
+
+
+#
+# Minimax algorithm w/ alpha-beta pruning
+#
+
+
+
+#
+# Actions
+#
+
+# choose a move to play
+def play():
+    # print_board(boards)
+
+    # just play a random move for now
+    n = np.random.randint(1,9)
+    while boards[curr][n] != 0:
+        n = np.random.randint(1,9)
+
+    # print("playing", n)
+    place(curr, n, 1)
+    return n
+
+# place a move in the global boards
+def place( board, num, player ):
+    global curr
+    curr = num
+    boards[board][num] = player
+
+#
+# Printing/Debug
+#
 
 # print a row
 def print_board_row(bd, a, b, c, i, j, k):
@@ -39,24 +84,9 @@ def print_board(board):
     print_board_row(board, 7,8,9,7,8,9)
     print()
 
-# choose a move to play
-def play():
-    # print_board(boards)
-
-    # just play a random move for now
-    n = np.random.randint(1,9)
-    while boards[curr][n] != 0:
-        n = np.random.randint(1,9)
-
-    # print("playing", n)
-    place(curr, n, 1)
-    return n
-
-# place a move in the global boards
-def place( board, num, player ):
-    global curr
-    curr = num
-    boards[board][num] = player
+#
+# Server
+#
 
 # read what the server sent us and
 # parse only the strings that are necessary
