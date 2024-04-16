@@ -13,53 +13,114 @@ import socket
 import sys
 import numpy as np # type: ignore
 
+import copy
+
 #
 # Game state/model
 #
+
+EMPTY = 0
+PLAYER = 1
+OPPONENT = 2
 
 boards = np.zeros((10, 10), dtype="int8") # 0-th index ignored
 s = [".","X","O"]
 curr = 0 
 
-start_indices = [(1, 1), (1, 4), (1, 7), \
-                 (4, 1), (4, 4), (4, 7), \
-                 (7, 1), (7, 4), (7, 7)]
-
-def get_board(n):
-    i, j = start_indices[n]
-    return boards[i: i + 3, j: j + 3]
-
 #
 # Static evaluation of game state
 #
 
-# (0, 0), (0, 1), (0, 2)
-# (1, 0), (1, 1), (1, 2)
-# (2, 0), (2, 1), (2, 2)
+# 1 2 3  
+# 4 5 6
+# 7 8 9
 
-triplets = [[(0, 0), (0, 1), (0, 2)], [(1, 0), (1, 1), (1, 2)], [(2, 0), (2, 1), (2, 2)], \
-            [(0, 0), (1, 0), (2, 0)], [(0, 1), (1, 1), (2, 1)], [(0, 2), (1, 2), (2, 2)], \
-            [(0, 0), (1, 1), (2, 2)], [(0, 2), (1, 1), (2, 0)]]
+triplets = [(1, 2, 3), (4, 5, 6), (7, 8, 9), \
+            (1, 4, 7), (2, 5, 8), (3, 6, 9), \
+            (1, 5, 9), (3, 5, 7)]
 
-def check_board_winner(n):
-    board = get_board(n)
+def check_board_winner(board):
     for tri in triplets:
-        i1, j1 = tri[0]
-        i2, j2 = tri[1]
-        i3, j3 = tri[2]
-
-        if (board[i1, j1] == board[i2, j2] and \
-            board[i2, j2] == board[i3, j3] and \
-            board[i3, j3] == board[i1, j1]):
-            return board[i1, j1]
+        i, j, k = tri
         
+        if (board[i] == board[j] and \
+            board[j] == board[k] and \
+            board[k] == board[i]):
+            return board[i]
+    
     return 0
+
+def check_game_over(boards):
+    for board in boards[1:]:
+        winner = check_board_winner(board)
+        
+        if winner:
+            return winner
+    
+    return 0
+
+def eval_winner(winner):
+    if winner == PLAYER:
+        return 1
+    else:
+        return -1
+
+#
+# Move generation
+#
+
+def generate_moves(boards, n, turn):
+    board = boards[n]
+    empty = []
+    moves = []
+
+    for pos, cell in enumerate(board):
+        if cell == EMPTY:
+            empty.append(pos)
+
+    for pos in empty:
+        new_boards = copy.deepcopy(boards)
+        new_boards[n][pos] = turn
+        moves.append(new_boards)
+
+    return moves
 
 #
 # Minimax algorithm w/ alpha-beta pruning
 #
 
+def minimax(boards, n, depth, alpha, beta, turn):
+    winner = check_game_over(boards)
+    if winner != 0 or depth == 0:
+        return eval_winner(winner)
+    
+    if turn == PLAYER:
+        max_eval = float('-inf')
+        moves = generate_moves(boards, n, turn)
 
+        for move in moves:
+            eval = minimax(move, depth - 1, alpha, beta, OPPONENT)
+            max_eval = max(max_eval, eval)
+
+            alpha = max(alpha, eval)
+            if beta <= alpha:
+                break
+        
+        return max_eval
+    
+    if turn == OPPONENT:
+        min_eval = float('inf')
+        moves = generate_moves(boards, n, turn)
+
+        for move in moves:
+            eval = minimax(move, depth - 1, alpha, beta, PLAYER)
+            min_eval = min(min_eval, eval)
+
+            beta = min(beta, eval)
+            if beta <= alpha:
+                break
+
+        return min_eval
 
 #
 # Actions
