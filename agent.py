@@ -10,11 +10,27 @@
 # ./agent.py -p <PORT>
 
 import socket
-import sys
 import copy
 import random
+import argparse
+import inspect
 
 import numpy as np # type: ignore
+
+#
+# Debug
+#
+DEBUG = True # Set to true to enable debugging mode
+
+def log(message, end = '\n'):
+    current_frame = inspect.currentframe()
+    caller_frame = inspect.getouterframes(current_frame, 2)
+
+    func = caller_frame[1].function
+    lineno = caller_frame[1].lineno
+
+    if DEBUG:
+        print(f'[line {lineno}] [{func}()] ' + message, end = end)
 
 #
 # Constants
@@ -51,10 +67,14 @@ triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
 #
 # Game state
 #
-board = np.zeroes((9, 9), dtype='int8')
+board = np.zeros((9, 9), dtype='int8')
 board_index = 0
+log(f'Initial board{str(board)}')
+log(f'Initial board index: {str(board_index)}')
 
 def get_subboard(n):
+    global board
+    log(f'subboard: {str(board[n])}')
     return board[n]
 
 #
@@ -231,22 +251,37 @@ def parse(string):
     return 0
 
 def main():
+    log('Starting program...')
+
+    parser = argparse.ArgumentParser(prog = 'agent.py', \
+                                     description = 'comp3411 - assignment 3 - nine-board tic-tac-toe', \
+                                     epilog = 'author: mohammad mayaz rakib (z5361151)')
+    parser.add_argument('-p', '--port', required = True)
+    args = parser.parse_args()
+    log(f'parsed args: {str(args)}')
+
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    port = int(sys.argv[2])
+    port = int(args.port)
+    log(f'port: {str(port)}')
 
     s.connect(('localhost', port))
+    log('Trying to connect...')
 
     while True:
         text = s.recv(1024).decode()
         if not text:
             continue
+        log('Connected!')
+        log('request text: ' + str(text))
         for line in text.split('\n'):
             response = parse(line)
+            log('response text: ' + str(response))
             if response == -1:
                 s.close()
+                log('Connection closed!')
                 return
             elif response > 0:
                 s.sendall((str(response) + '\n').encode())
 
 if __name__ == '__main__':
-    pass
+    main()
