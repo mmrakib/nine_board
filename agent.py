@@ -9,19 +9,19 @@
 # Usage:
 # ./agent.py -p <PORT>
 
-import socket
-import copy
-import random
-import argparse
 import inspect
+import copy
 
 import numpy as np # type: ignore
 
 #
 # Debug
 #
-DEBUG = True # Set to true to enable debugging mode
 
+# Enable/disable debugging mode
+DEBUG = True
+
+# Log message if debugging mode enabled
 def log(message, end = '\n'):
     current_frame = inspect.currentframe()
     caller_frame = inspect.getouterframes(current_frame, 2)
@@ -35,31 +35,33 @@ def log(message, end = '\n'):
 #
 # Constants
 #
-POS_INF = float('inf')
-NEG_INF = float('-inf')
 
+# Cell values
 EMPTY = 0
 PLAYER = 1
 OPPONENT = 2
 
+# Game state values
 ONGOING = 0
 PLAYER_WIN = 1
 OPPONENT_WIN = 2
 DRAW = 3
 
+# Score values
 PLAYER_WIN_SCORE = 10
 OPPONENT_WIN_SCORE = -10
 DRAW_SCORE = 0
 
+# +- infinity definitions
+POS_INF = float('inf')
+NEG_INF = float('-inf')
+
+# Maximum search tree depth
+MAX_DEPTH = 1000
+
 #
 # Pre-computed values
 #
-
-# 0 1 2
-# 3 4 5
-# 6 7 8
-
-markers = ['.', 'X', 'O'] # Corresponds to cell values
 triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
             (0, 3, 6), (1, 4, 7), (2, 5, 8), \
             (0, 4, 8), (2, 4, 6)]
@@ -69,24 +71,18 @@ triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
 #
 board = np.zeros((9, 9), dtype='int8')
 board_index = 0
-log(f'Initial board{str(board)}')
-log(f'Initial board index: {str(board_index)}')
-
-def get_subboard(n):
-    global board
-    log(f'subboard: {str(board[n])}')
-    return board[n]
+move_index = 0
 
 #
 # Game static evaluation
 #
 def compute_subboard_full(subboard):
-    for cell in subboard:
-        if cell == EMPTY:
-            return False
-    return True
-
-def compute_subboard_winner(subboard):
+    if np.all(subboard):
+        return True
+    else:
+        return False
+    
+def compute_subboard_state(subboard):
     for tri in triplets:
         i, j, k = tri
 
@@ -94,61 +90,57 @@ def compute_subboard_winner(subboard):
             subboard[j] == subboard[k] and \
             subboard[k] == subboard[i] and \
             subboard[i] != EMPTY:
-            
+
             if subboard[i] == PLAYER:
                 return PLAYER_WIN
             elif subboard[i] == OPPONENT:
                 return OPPONENT_WIN
-        
+    
     if compute_subboard_full(subboard):
         return DRAW
     
     return ONGOING
 
-def compute_subboard_score(subboard, winner = -1):
-    # Skip winner computation if already computed
-    if (winner != -1):
-        winner = compute_subboard_winner(subboard)
+def compute_subboard_score(subboard):
+    state = compute_subboard_state(subboard)
 
-    if winner > 0:
-        if winner == PLAYER_WIN:
+    if state > 0:
+        if state == PLAYER_WIN:
             return PLAYER_WIN_SCORE
-        elif winner == OPPONENT_WIN:
+        elif state == OPPONENT_WIN:
             return OPPONENT_WIN_SCORE
         else:
             return DRAW_SCORE
     else:
-        # TODO: Add static evaluation for incomplete game states; random for now
-        return random.randint(OPPONENT_WIN_SCORE + 1, PLAYER_WIN_SCORE - 1)
+        # TODO: Add static evaluation for incomplete game states
+        return DRAW_SCORE
     
 #
 # Game strategy
 #
-def generate_moves(board, n, turn):
-    subboard = get_subboard(n)
+def generate_moves(subboard, turn):
     moves = []
 
     for pos, cell in enumerate(subboard):
         if cell == EMPTY:
-            newboard = copy.deepcopy(board)
-            newboard[n][pos] = turn
-            moves.append( (pos, newboard) ) # move = (position played, copy of board w/ position played)
-    
+            new_subboard = copy.copy(subboard)
+            new_subboard[pos] = turn
+            moves.append((pos, new_subboard))
+
     return moves
 
-def minimax(board, n, depth, alpha, beta, turn):
-    subboard = get_subboard(board)
-    winner = compute_subboard_winner(subboard)
+def minimax(subboard, depth, alpha, beta, turn):
+    state = compute_subboard_state(subboard)
 
-    if winner > 0 or depth == 0:
-        return compute_subboard_score(subboard, winner)
+    if state > 0 or depth == 0:
+        return compute_subboard_score(subboard)
     
     if turn == PLAYER:
         max_eval = NEG_INF
-        moves = generate_moves(board, n, turn)
+        moves = generate_moves(subboard, turn)
 
         for move in moves:
-            eval = minimax(move[1], move[0], depth - 1, alpha, beta, OPPONENT)
+            eval = minimax(move[1], depth - 1, alpha, beta, OPPONENT)
             max_eval = max(eval, max_eval)
 
             alpha = max(eval, alpha)
@@ -159,10 +151,10 @@ def minimax(board, n, depth, alpha, beta, turn):
     
     if turn == OPPONENT:
         min_eval = POS_INF
-        moves = generate_moves(board, n, turn)
+        moves = generate_moves(subboard, turn)
 
         for move in moves:
-            eval = minimax(move[1], move[0], depth - 1, alpha, beta, PLAYER)
+            eval = minimax(move[1], depth - 1, alpha, beta, PLAYER)
             min_eval = min(eval, min_eval)
 
             beta = min(eval, beta)
@@ -174,114 +166,75 @@ def minimax(board, n, depth, alpha, beta, turn):
 #
 # Actions
 #
-def decide_move(board, n, turn):
-    moves = generate_moves(board, n, turn)
-    best_eval = NEG_INF
-    best_move_index = 0
-
-    for move_index, move in enumerate(moves):
-        eval = minimax(move[1], move[0], 5, NEG_INF, POS_INF, OPPONENT if turn == PLAYER else PLAYER)
-        
-        if eval > best_eval:
-            best_eval = eval
-            best_move_index = move_index
-
-    return moves[best_move_index][0]
-
 def make_move(n, pos, turn):
     global board
     global board_index
+    global move_index
 
     board[n][pos] = turn
-    board_index = pos
+    board_index - pos
+    move_index += 1
 
-def player_move(n, pos = -1):
-    # Skip if position already decided
-    if (pos == -1):
-        pos = decide_move(board, n, PLAYER)
-    make_move(n, pos, PLAYER)
-    return pos
-    
-def opponent_move(n, pos):
-    make_move(n, pos, OPPONENT)
+def decide_move(n, turn):
+    global board
+    subboard = board[n]
 
-#
-# Server
-#
-def parse(string):
-    global board_index
-    
-    if "(" in string:
-        command, args = string.split("(")
-        args = args.split(")")[0]
-        args = args.split(",")
-    else:
-        command, args = string, []
+    moves = generate_moves(subboard, turn)
+    if (len(moves) == 0):
+        n = np.random.randint(0, 9)
+        pos = np.random.randint(0, 9)
 
-    if command == "second_move":
-        n = int(args[0])
-        pos = int(args[1])
+        while board[n, pos] != EMPTY:
+            n = np.random.randint(0, 9)
+            pos = np.random.randint(0, 9)
 
-        opponent_move(n, pos)
-        return player_move(n)
-    
-    elif command == "third_move":
-        n = int(args[0])
-        pos = int(args[1])
-        pos2 = int(args[2])
+        return pos
 
-        player_move(n, pos)
-        opponent_move(board_index, pos2)
-        return player_move(n)
-    
-    elif command == "next_move":
-        pos = int(args[0])
+    best_eval = NEG_INF if turn == PLAYER else POS_INF
+    best_move_index = 0
 
-        opponent_move(board_index, pos)
-        return player_move(board_index)
-    
-    elif command == "win":
-        print("We won.")
-        return -1
-    
-    elif command == "loss":
-        print("We lost.")
-        return -1
+    for move_index, move in enumerate(moves):
+        eval = minimax(move[1], MAX_DEPTH, NEG_INF, POS_INF, OPPONENT if turn == PLAYER else PLAYER)
 
-    return 0
+        if turn == PLAYER:
+            if eval > best_eval:
+                best_eval = eval
+                best_move_index = move_index
+
+        if turn == OPPONENT:
+            if eval < best_eval:
+                best_eval = eval
+                best_move_index = move_index
+
+    return moves[best_move_index][0]
 
 def main():
-    log('Starting program...')
+    global board
+    global board_index
+    global move_index
+    
+    for i, row in enumerate(board):
+        for j, cell in enumerate(row):
+            val = np.random.randint(0, 3)
+            if val > 0:
+                move_index += 1
+            board[i, j] = val
 
-    parser = argparse.ArgumentParser(prog = 'agent.py', \
-                                     description = 'comp3411 - assignment 3 - nine-board tic-tac-toe', \
-                                     epilog = 'author: mohammad mayaz rakib (z5361151)')
-    parser.add_argument('-p', '--port', required = True)
-    args = parser.parse_args()
-    log(f'parsed args: {str(args)}')
+    board_index = np.random.randint(0, 9)
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    port = int(args.port)
-    log(f'port: {str(port)}')
+    print(f'board:\n{board}')
+    print(f'board_index: {board_index}')
+    print(f'move_index: {move_index}')
 
-    s.connect(('localhost', port))
-    log('Trying to connect...')
+    print('generated moves: ' + str(generate_moves(board[board_index], PLAYER)))
 
-    while True:
-        text = s.recv(1024).decode()
-        if not text:
-            continue
-        log('Connected!')
-        log('request text: ' + str(text))
-        for line in text.split('\n'):
-            response = parse(line)
-            log('response text: ' + str(response))
-            if response == -1:
-                s.close()
-                log('Connection closed!')
-                return
-            elif response > 0:
-                s.sendall((str(response) + '\n').encode())
+    pos = decide_move(board_index, PLAYER)
+    print(f'pos: {pos}')
+    make_move(board_index, pos, PLAYER)
+
+    print(f'board:\n{board}')
+    print(f'board_index: {board_index}')
+    print(f'move_index: {move_index}')
 
 if __name__ == '__main__':
     main()

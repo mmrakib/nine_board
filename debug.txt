@@ -1,10 +1,13 @@
-[line 257] [main()] parsed args: Namespace(port='12345')
-[line 261] [main()] port: 12345
-[line 264] [main()] Trying to connect...
-[line 270] [main()] Connected!
-[line 271] [main()] request text: init.
-start(o).
-second_move(6,9).
-
-[line 274] [main()] response text: 0
-[line 274] [main()] response text: 0
+[line 72] [<module>()] Initial board[[0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]
+ [0 0 0 0 0 0 0 0 0]]
+[line 73] [<module>()] Initial board index: 0
+[line 275] [main()] Starting program...
+[line 282] [main()] parsed args: Namespace(port='12345')
+[line 286] [main()] port: 12345

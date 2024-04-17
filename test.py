@@ -1,14 +1,3 @@
-#!/usr/bin/python3
-
-# File:   agent.py
-# Course: comp3411/9814 - Artificial Intelligence
-# Task:   assignment 3 - nine-board tic-tac-toe
-# Author: mohammad mayaz rakib
-# zID:    z5361151
-
-# Usage:
-# ./agent.py -p <PORT>
-
 import socket
 import copy
 import random
@@ -69,21 +58,14 @@ triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
 #
 board = np.zeros((9, 9), dtype='int8')
 board_index = 0
-move_number = 0
 log(f'Initial board{str(board)}')
 log(f'Initial board index: {str(board_index)}')
 
-def get_subboard(n, bd = -1):
-    # Use global board if board not provided
-    if (type(bd) is int):
-        global board
-        subboard = board[n]
-        log(f'subboard: {str(subboard)}')
-        return subboard
-    else:
-        subboard = bd[n]
-        log(f'subboard: {str(subboard)}')
-        return subboard
+def get_subboard(n):
+    global board
+    subboard = board[n]
+    log(f'subboard: {str(subboard)}')
+    return subboard
 
 #
 # Game static evaluation
@@ -134,7 +116,7 @@ def compute_subboard_score(subboard, winner = -1):
 #
 def generate_moves(board, n, turn):
     log(f'Generating move on turn {str(turn)} and subboard {str(n)}')
-    subboard = get_subboard(n, board)
+    subboard = get_subboard(n)
     moves = []
 
     log(f'board: {str(board)}')
@@ -150,12 +132,12 @@ def generate_moves(board, n, turn):
     log(f'generated moves: {str(moves)}')
     return moves
 
-def minimax(board, n, depth, alpha, beta, turn):
+def minimax(zboard, n, depth, alpha, beta, turn):
     log('Minimax iteration...')
     log(f'(n = {str(n)}, depth = {str(depth)}, alpha = {str(alpha)}, beta = {str(beta)}, turn = {str(turn)})')
-    log(f'current board{str(board)}')
+    log(f'current board{str(zboard)}')
 
-    subboard = get_subboard(n, board)
+    subboard = get_subboard(zboard)
     log(f'current subboard: {str(subboard)}')
     winner = compute_subboard_winner(subboard)
 
@@ -164,7 +146,7 @@ def minimax(board, n, depth, alpha, beta, turn):
     
     if turn == PLAYER:
         max_eval = NEG_INF
-        moves = generate_moves(board, n, turn)
+        moves = generate_moves(zboard, n, turn)
         log(f'PLAYER generated moves: {str(moves)}')
 
         for move in moves:
@@ -179,7 +161,7 @@ def minimax(board, n, depth, alpha, beta, turn):
     
     if turn == OPPONENT:
         min_eval = POS_INF
-        moves = generate_moves(board, n, turn)
+        moves = generate_moves(zboard, n, turn)
         log(f'OPPONENT generated moves: {str(moves)}')
 
         for move in moves:
@@ -196,21 +178,12 @@ def minimax(board, n, depth, alpha, beta, turn):
 # Actions
 #
 def decide_move(board, n, turn):
-    global move_number
-
-    if move_number < 30:
-        pos = random.randint(0, 8)
-        while board[n][pos] != 0:
-            pos = random.randint(0, 8)
-
-        return pos
-
     moves = generate_moves(board, n, turn)
     best_eval = NEG_INF
     best_move_index = 0
 
     for move_index, move in enumerate(moves):
-        eval = minimax(move[1], move[0], 2, NEG_INF, POS_INF, OPPONENT if turn == PLAYER else PLAYER)
+        eval = minimax(move[1], move[0], 5, NEG_INF, POS_INF, OPPONENT if turn == PLAYER else PLAYER)
         
         if eval > best_eval:
             best_eval = eval
@@ -221,12 +194,10 @@ def decide_move(board, n, turn):
 def make_move(n, pos, turn):
     global board
     global board_index
-    global move_number
 
     log(f'Making move for {turn} at {n} and {pos}')
     board[n][pos] = turn
     board_index = pos
-    move_number += 1
 
 def player_move(n, pos = -1):
     # Skip if position already decided
@@ -256,7 +227,7 @@ def parse(string):
         pos = int(args[1])
 
         opponent_move(n, pos - 1)
-        return player_move(n) + 1
+        return player_move(n)
     
     elif command == "third_move":
         n = int(args[0])
@@ -265,13 +236,13 @@ def parse(string):
 
         player_move(n, pos - 1)
         opponent_move(board_index, pos2 - 1)
-        return player_move(n) + 1
+        return player_move(n)
     
     elif command == "next_move":
         pos = int(args[0])
 
         opponent_move(board_index, pos - 1)
-        return player_move(board_index) + 1
+        return player_move(board_index)
     
     elif command == "win":
         print("We won.")
@@ -284,37 +255,31 @@ def parse(string):
     return 0
 
 def main():
-    log('Starting program...')
+    testboard = np.zeros((9, 9), dtype='int8')
+    subboard = board[3]
 
-    parser = argparse.ArgumentParser(prog = 'agent.py', \
-                                     description = 'comp3411 - assignment 3 - nine-board tic-tac-toe', \
-                                     epilog = 'author: mohammad mayaz rakib (z5361151)')
-    parser.add_argument('-p', '--port', required = True)
-    args = parser.parse_args()
-    log(f'parsed args: {str(args)}')
+    print(f'board: {str(testboard)}')
+    print(f'subboard: {str(subboard)}')
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    port = int(args.port)
-    log(f'port: {str(port)}')
+    ret1 = compute_subboard_full(subboard)
+    print(f'1. compute_subboard_full() -> {ret1}')
 
-    s.connect(('localhost', port))
-    log('Trying to connect...')
+    ret2 = compute_subboard_full([1, 2, 1, 2, 2, 1, 1, 2])
+    print(f'2. compute_subboard_full() -> {ret2}')
 
-    while True:
-        text = s.recv(1024).decode()
-        if not text:
-            continue
-        log('Connected!')
-        log('request text: ' + str(text))
-        for line in text.split('\n'):
-            response = parse(line)
-            log('response text: ' + str(response))
-            if response == -1:
-                s.close()
-                log('Connection closed!')
-                return
-            elif response > 0:
-                s.sendall((str(response) + '\n').encode())
+    ret3 = compute_subboard_winner([0, 0, 0, 1, 1, 1, 0, 0, 0])
+    print(f'1. compute_subboard_winner() -> {ret3}')
+
+    ret4 = compute_subboard_winner([0, 1, 0, 0, 1, 0, 0, 1, 0])
+    print(f'2. compute_subboard_winner() -> {ret4}')
+
+    ret5 = compute_subboard_winner([1, 2, 1, 2, 2, 1, 1, 2])
+    print(f'3. compute_subboard_winner() -> {ret5}')
+
+    ret6 = make_move(2, 5, OPPONENT)
+    print(f'1. make_move() -> {str(board)}')
+
+    ret7 = minimax(board, 2, 5, float('-inf'), float('inf'), PLAYER)
 
 if __name__ == '__main__':
     main()
