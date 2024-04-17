@@ -1,122 +1,151 @@
 #!/usr/bin/python3
 
-# File: agent.py 
-# Course: COMP3411/9814 Artificial Intelligence
-# Assessment: Assignment 3 - Nine-Board Tic-Tac-Toe Agent
-# Author: Mohammad Mayaz Rakib
-# zID: z5361151
+# File:   agent.py
+# Course: comp3411/9814 - Artificial Intelligence
+# Task:   assignment 3 - nine-board tic-tac-toe
+# Author: mohammad mayaz rakib
+# zID:    z5361151
 
-# USAGE:
+# Usage:
 # ./agent.py -p <PORT>
 
 import socket
 import sys
+import copy
+import random
+
 import numpy as np # type: ignore
 
-import copy
-
 #
-# Game state/model
+# Constants
 #
+POS_INF = float('inf')
+NEG_INF = float('-inf')
 
 EMPTY = 0
 PLAYER = 1
 OPPONENT = 2
 
-boards = np.zeros((10, 10), dtype="int8") # 0-th index ignored
-s = [".","X","O"]
-curr = 0 
+ONGOING = 0
+PLAYER_WIN = 1
+OPPONENT_WIN = 2
+DRAW = 3
+
+PLAYER_WIN_SCORE = 10
+OPPONENT_WIN_SCORE = -10
+DRAW_SCORE = 0
 
 #
-# Static evaluation of game state
+# Pre-computed values
 #
 
-# 1 2 3  
-# 4 5 6
-# 7 8 9
+# 0 1 2
+# 3 4 5
+# 6 7 8
 
-triplets = [(1, 2, 3), (4, 5, 6), (7, 8, 9), \
-            (1, 4, 7), (2, 5, 8), (3, 6, 9), \
-            (1, 5, 9), (3, 5, 7)]
+markers = ['.', 'X', 'O'] # Corresponds to cell values
+triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
+            (0, 3, 6), (1, 4, 7), (2, 5, 8), \
+            (0, 4, 8), (2, 4, 6)]
 
-def check_board_winner(board):
+#
+# Game state
+#
+board = np.zeroes((9, 9), dtype='int8')
+board_index = 0
+
+def get_subboard(n):
+    return board[n]
+
+#
+# Game static evaluation
+#
+def compute_subboard_full(subboard):
+    for cell in subboard:
+        if cell == EMPTY:
+            return False
+    return True
+
+def compute_subboard_winner(subboard):
     for tri in triplets:
         i, j, k = tri
-        
-        if (board[i] == board[j] and \
-            board[j] == board[k] and \
-            board[k] == board[i]):
-            return board[i]
-    
-    return 0
 
-def check_game_over(boards):
-    for board in boards[1:]:
-        winner = check_board_winner(board)
+        if subboard[i] == subboard[j] and \
+            subboard[j] == subboard[k] and \
+            subboard[k] == subboard[i] and \
+            subboard[i] != EMPTY:
+            
+            if subboard[i] == PLAYER:
+                return PLAYER_WIN
+            elif subboard[i] == OPPONENT:
+                return OPPONENT_WIN
         
-        if winner:
-            return winner
+    if compute_subboard_full(subboard):
+        return DRAW
     
-    return 0
+    return ONGOING
 
-def eval_winner(winner):
-    if winner == PLAYER:
-        return 1
+def compute_subboard_score(subboard, winner = -1):
+    # Skip winner computation if already computed
+    if (winner != -1):
+        winner = compute_subboard_winner(subboard)
+
+    if winner > 0:
+        if winner == PLAYER_WIN:
+            return PLAYER_WIN_SCORE
+        elif winner == OPPONENT_WIN:
+            return OPPONENT_WIN_SCORE
+        else:
+            return DRAW_SCORE
     else:
-        return -1
-
+        # TODO: Add static evaluation for incomplete game states; random for now
+        return random.randint(OPPONENT_WIN_SCORE + 1, PLAYER_WIN_SCORE - 1)
+    
 #
-# Move generation
+# Game strategy
 #
-
-def generate_moves(boards, n, turn):
-    board = boards[n]
-    empty = []
+def generate_moves(board, n, turn):
+    subboard = get_subboard(n)
     moves = []
 
-    for pos, cell in enumerate(board):
+    for pos, cell in enumerate(subboard):
         if cell == EMPTY:
-            empty.append(pos)
-
-    for pos in empty:
-        new_boards = copy.deepcopy(boards)
-        new_boards[n][pos] = turn
-        moves.append(new_boards)
-
+            newboard = copy.deepcopy(board)
+            newboard[n][pos] = turn
+            moves.append( (pos, newboard) ) # move = (position played, copy of board w/ position played)
+    
     return moves
 
-#
-# Minimax algorithm w/ alpha-beta pruning
-#
+def minimax(board, n, depth, alpha, beta, turn):
+    subboard = get_subboard(board)
+    winner = compute_subboard_winner(subboard)
 
-def minimax(boards, n, depth, alpha, beta, turn):
-    winner = check_game_over(boards)
-    if winner != 0 or depth == 0:
-        return eval_winner(winner)
+    if winner > 0 or depth == 0:
+        return compute_subboard_score(subboard, winner)
     
     if turn == PLAYER:
-        max_eval = float('-inf')
-        moves = generate_moves(boards, n, turn)
+        max_eval = NEG_INF
+        moves = generate_moves(board, n, turn)
 
         for move in moves:
-            eval = minimax(move, depth - 1, alpha, beta, OPPONENT)
-            max_eval = max(max_eval, eval)
+            eval = minimax(move[1], move[0], depth - 1, alpha, beta, OPPONENT)
+            max_eval = max(eval, max_eval)
 
-            alpha = max(alpha, eval)
+            alpha = max(eval, alpha)
             if beta <= alpha:
                 break
-        
+
         return max_eval
     
     if turn == OPPONENT:
-        min_eval = float('inf')
-        moves = generate_moves(boards, n, turn)
+        min_eval = POS_INF
+        moves = generate_moves(board, n, turn)
 
         for move in moves:
-            eval = minimax(move, depth - 1, alpha, beta, PLAYER)
-            min_eval = min(min_eval, eval)
+            eval = minimax(move[1], move[0], depth - 1, alpha, beta, PLAYER)
+            min_eval = min(eval, min_eval)
 
-            beta = min(beta, eval)
+            beta = min(eval, beta)
             if beta <= alpha:
                 break
 
@@ -125,48 +154,43 @@ def minimax(boards, n, depth, alpha, beta, turn):
 #
 # Actions
 #
+def decide_move(board, n, turn):
+    moves = generate_moves(board, n, turn)
+    best_eval = NEG_INF
+    best_move_index = 0
 
-def play():
-    n = np.random.randint(1,9)
-    while boards[curr][n] != 0:
-        n = np.random.randint(1,9)
+    for move_index, move in enumerate(moves):
+        eval = minimax(move[1], move[0], 5, NEG_INF, POS_INF, OPPONENT if turn == PLAYER else PLAYER)
+        
+        if eval > best_eval:
+            best_eval = eval
+            best_move_index = move_index
 
-    place(curr, n, 1)
-    return n
+    return moves[best_move_index][0]
 
-def place( board, num, player ):
-    global curr
-    curr = num
-    boards[board][num] = player
+def make_move(n, pos, turn):
+    global board
+    global board_index
 
-#
-# Debug
-#
+    board[n][pos] = turn
+    board_index = pos
 
-def print_board_row(bd, a, b, c, i, j, k):
-    print(" "+s[bd[a][i]]+" "+s[bd[a][j]]+" "+s[bd[a][k]]+" | " \
-             +s[bd[b][i]]+" "+s[bd[b][j]]+" "+s[bd[b][k]]+" | " \
-             +s[bd[c][i]]+" "+s[bd[c][j]]+" "+s[bd[c][k]])
-
-def print_board(board):
-    print_board_row(board, 1,2,3,1,2,3)
-    print_board_row(board, 1,2,3,4,5,6)
-    print_board_row(board, 1,2,3,7,8,9)
-    print(" ------+-------+------")
-    print_board_row(board, 4,5,6,1,2,3)
-    print_board_row(board, 4,5,6,4,5,6)
-    print_board_row(board, 4,5,6,7,8,9)
-    print(" ------+-------+------")
-    print_board_row(board, 7,8,9,1,2,3)
-    print_board_row(board, 7,8,9,4,5,6)
-    print_board_row(board, 7,8,9,7,8,9)
-    print()
+def player_move(n, pos = -1):
+    # Skip if position already decided
+    if (pos == -1):
+        pos = decide_move(board, n, PLAYER)
+    make_move(n, pos, PLAYER)
+    return pos
+    
+def opponent_move(n, pos):
+    make_move(n, pos, OPPONENT)
 
 #
 # Server
 #
-
 def parse(string):
+    global board_index
+    
     if "(" in string:
         command, args = string.split("(")
         args = args.split(")")[0]
@@ -175,22 +199,33 @@ def parse(string):
         command, args = string, []
 
     if command == "second_move":
-        place(int(args[0]), int(args[1]), 2)
-        return play()
+        n = int(args[0])
+        pos = int(args[1])
+
+        opponent_move(n, pos)
+        return player_move(n)
+    
     elif command == "third_move":
-        place(int(args[0]), int(args[1]), 1)
-        place(curr, int(args[2]), 2)
-        return play()
+        n = int(args[0])
+        pos = int(args[1])
+        pos2 = int(args[2])
+
+        player_move(n, pos)
+        opponent_move(board_index, pos2)
+        return player_move(n)
+    
     elif command == "next_move":
-        place(curr, int(args[0]), 2)
-        return play()
+        pos = int(args[0])
 
+        opponent_move(board_index, pos)
+        return player_move(board_index)
+    
     elif command == "win":
-        print("Yay!! We win!! :)")
+        print("We won.")
         return -1
-
+    
     elif command == "loss":
-        print("We lost :(")
+        print("We lost.")
         return -1
 
     return 0
@@ -200,17 +235,18 @@ def main():
     port = int(sys.argv[2])
 
     s.connect(('localhost', port))
+
     while True:
         text = s.recv(1024).decode()
         if not text:
             continue
-        for line in text.split("\n"):
+        for line in text.split('\n'):
             response = parse(line)
             if response == -1:
                 s.close()
                 return
             elif response > 0:
-                s.sendall((str(response) + "\n").encode())
+                s.sendall((str(response) + '\n').encode())
 
 if __name__ == '__main__':
-    main()
+    pass
