@@ -48,8 +48,14 @@ OPPONENT_WIN = 2
 DRAW = 3
 
 # Score values
-PLAYER_WIN_SCORE = 10
-OPPONENT_WIN_SCORE = -10
+PLAYER_WIN_SCORE = 500
+OPPONENT_WIN_SCORE = -500
+PLAYER_TWO_ROW_SCORE = 5
+OPPONENT_TWO_ROW_SCORE = -5
+PLAYER_EDGE_PAIR_SCORE = 3
+OPPONENT_EDGE_PAIR_SCORE = -3
+PLAYER_ONE_CELL_SCORE = 2
+OPPONENT_ONE_CELL_SCORE = -2
 DRAW_SCORE = 0
 
 # +- infinity definitions
@@ -62,20 +68,39 @@ MAX_DEPTH = 1000
 #
 # Pre-computed values
 #
-triplets = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
-            (0, 3, 6), (1, 4, 7), (2, 5, 8), \
-            (0, 4, 8), (2, 4, 6)]
+triples = [(0, 1, 2), (3, 4, 5), (6, 7, 8), \
+           (0, 3, 6), (1, 4, 7), (2, 5, 8), \
+           (0, 4, 8), (2, 4, 6)]
+
+pairs = [(0, 1), (0, 3), (0, 4), (1, 2), (1, 3), \
+         (1, 4), (1, 5), (2, 4), (2, 5), (3, 4), \
+         (3, 6), (3, 7), (4, 5), (4, 6), (4, 7), \
+         (4, 8), (5, 7), (5, 8), (6, 7), (7, 8)]
+
+edge_pairs = [(0, 2), (3, 5), (6, 8), \
+              (0, 6), (1, 7), (2, 8), \
+              (0, 8), (2, 6)]
+
+positional_score = [1, 0, 1, 0, 2, 0, 1, 0, 1]
 
 #
 # Game state
 #
-board = np.zeros((9, 9), dtype='int8')
+board = np.zeros((9, 9), dtype='int32')
 board_index = 0
 move_index = 0
 
 #
 # Game static evaluation
 #
+def is_cell_empty(n, pos):
+    global board
+
+    if board[n][pos] == EMPTY:
+        return True
+    else:
+        return False
+
 def compute_subboard_full(subboard):
     if np.all(subboard):
         return True
@@ -83,12 +108,11 @@ def compute_subboard_full(subboard):
         return False
     
 def compute_subboard_state(subboard):
-    for tri in triplets:
+    for tri in triples:
         i, j, k = tri
 
         if subboard[i] == subboard[j] and \
             subboard[j] == subboard[k] and \
-            subboard[k] == subboard[i] and \
             subboard[i] != EMPTY:
 
             if subboard[i] == PLAYER:
@@ -101,6 +125,43 @@ def compute_subboard_state(subboard):
     
     return ONGOING
 
+def compute_subboard_value(subboard):
+    global positional_score
+    values = positional_score
+
+    for pair in pairs:
+        i, j = pair
+
+        if subboard[i] == subboard[j] and \
+           subboard[i] != EMPTY:
+            if subboard[i] == PLAYER:
+                values[i] += PLAYER_TWO_ROW_SCORE
+                values[j] += PLAYER_TWO_ROW_SCORE
+            if subboard[j] == OPPONENT:
+                values[i] += OPPONENT_TWO_ROW_SCORE
+                values[i] += OPPONENT_TWO_ROW_SCORE
+
+    for pair in edge_pairs:
+        i, j = pair
+
+        if subboard[i] == subboard[j] and \
+           subboard[i] != EMPTY:
+            if subboard[i] == PLAYER:
+                values[i] += PLAYER_EDGE_PAIR_SCORE
+                values[j] += PLAYER_EDGE_PAIR_SCORE
+            if subboard[j] == OPPONENT:
+                values[i] += OPPONENT_EDGE_PAIR_SCORE
+                values[j] == OPPONENT_EDGE_PAIR_SCORE
+
+    for pos, cell in enumerate(subboard):
+        if cell != EMPTY:
+            if cell == PLAYER:
+                values[pos] += PLAYER_ONE_CELL_SCORE
+            if cell == OPPONENT:
+                values[pos] += OPPONENT_ONE_CELL_SCORE
+
+    return sum(values)
+
 def compute_subboard_score(subboard):
     state = compute_subboard_state(subboard)
 
@@ -112,8 +173,29 @@ def compute_subboard_score(subboard):
         else:
             return DRAW_SCORE
     else:
-        # TODO: Add static evaluation for incomplete game states
-        return DRAW_SCORE
+        return compute_subboard_value(subboard)
+    
+def compute_board_scores(board):
+    values = np.zeros(9, dtype='int32')
+
+    for pos, subboard in enumerate(board):
+        value = compute_subboard_score(subboard)
+        values[pos] = value
+
+    return values
+
+def compute_preference(board):
+    values = compute_board_scores(board)
+
+    max_value = NEG_INF
+    max_index = 0
+
+    for pos, value in enumerate(values):
+        if value > max_value:
+            max_value = value
+            max_index = pos
+
+    return max_index
     
 #
 # Game strategy
@@ -163,19 +245,7 @@ def minimax(subboard, depth, alpha, beta, turn):
 
         return min_eval
 
-#
-# Actions
-#
-def make_move(n, pos, turn):
-    global board
-    global board_index
-    global move_index
-
-    board[n][pos] = turn
-    board_index - pos
-    move_index += 1
-
-def decide_move(n, turn):
+def run_minimax(n, turn):
     global board
     subboard = board[n]
 
@@ -208,6 +278,40 @@ def decide_move(n, turn):
 
     return moves[best_move_index][0]
 
+def get_opponent_optimal_moves(board):
+    moves = []
+
+    for pos, subboard in enumerate(board):
+        move = run_minimax(pos, OPPONENT)
+        moves.append(move)
+
+    return moves
+
+#
+# Actions
+#
+
+def make_move(n, pos, turn):
+    global board
+    global board_index
+    global move_index
+
+    board[n][pos] = turn
+    board_index - pos
+    move_index += 1
+
+def decide_move(n, turn):
+    global board
+
+    preference = compute_preference(board)
+    opponent_moves = get_opponent_optimal_moves(board)
+
+    for pos, move in enumerate(opponent_moves):
+        if preference == move and is_cell_empty(n, pos):
+            return pos
+        
+    return run_minimax(n, turn)
+
 def main():
     global board
     global board_index
@@ -224,17 +328,14 @@ def main():
 
     print(f'board:\n{board}')
     print(f'board_index: {board_index}')
-    print(f'move_index: {move_index}')
-
-    print('generated moves: ' + str(generate_moves(board[board_index], PLAYER)))
+    print(f'move_index: {move_index}\n')
 
     pos = decide_move(board_index, PLAYER)
-    print(f'pos: {pos}')
+    print(f'pos: {pos}\n')
+
     make_move(board_index, pos, PLAYER)
 
-    print(f'board:\n{board}')
-    print(f'board_index: {board_index}')
-    print(f'move_index: {move_index}')
+    print(f'board after move: \n{board}')
 
 if __name__ == '__main__':
     main()
