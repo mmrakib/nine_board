@@ -9,6 +9,17 @@
 # Usage:
 # ./agent.py -p <PORT>
 
+# Summary:
+#
+# I employed a heuristic greedy search algorithm to complete this assignment. Essentially, this program works by utilising a minimax algorithm with alpha-beta pruning on each subboard of the entire 9x9 board. Thus, it is a minimax algorithm designed to solve each regular 3x3 tic-tac-toe problem as optimally as possible. Since the objective is to finish one of the subboards first, it makes sense to make optimal moves per subboard. However, this doesn't consider the world model, which is the entire 9x9 board and its constraints, when it performs any move planning. This makes a minimax-only algorithm a fundamentally greedy algorithm.
+# For this reason, I also implemented a heuristic to work with the greedy algorithm. This heuristic essentially performs a static evaluation on each subboard of the overall board, considering nothing but the positions of the both types of marker. It then returns a score between -500 and 500, where 500 is a winning board, and -500 is a losing board. Incomplete boards are evaluated based off of their position, such as whether or not they are close to the centre, using the matrix,
+# 1 0 1
+# 0 2 0
+# 1 0 1
+# giving preference to the centre spot and corner spots. It is also uses the frequency of two in a rows, that are 'near completion', as well as two in a rows with a gap in between, both of which are represented in a pre-computed manner using the 'pairs' and 'edge pairs' matrices. Utilising this heuristic gives the greedy algorithm a notion of 'closeness', and thus allows it to play optimally (i.e. run minimax) on the 'most preferred' 3x3 subboard, giving it a slight edge over a purely greedy approach.
+
+import socket
+import argparse
 import inspect
 import copy
 
@@ -19,7 +30,7 @@ import numpy as np # type: ignore
 #
 
 # Enable/disable debugging mode
-DEBUG = True
+DEBUG = False
 
 # Log message if debugging mode enabled
 def log(message, end = '\n'):
@@ -200,6 +211,13 @@ def compute_preference(board):
 #
 # Game strategy
 #
+def generate_random_move(n):
+    pos = np.random.randint(0, 9)
+    while not is_cell_empty(n, pos):
+        pos = np.random.randint(0, 9)
+
+    return pos
+
 def generate_moves(subboard, turn):
     moves = []
 
@@ -250,15 +268,12 @@ def run_minimax(n, turn):
     subboard = board[n]
 
     moves = generate_moves(subboard, turn)
-    if (len(moves) == 0):
-        n = np.random.randint(0, 9)
-        pos = np.random.randint(0, 9)
 
-        while board[n, pos] != EMPTY:
-            n = np.random.randint(0, 9)
-            pos = np.random.randint(0, 9)
+    if (len(moves) != 0):        
+        if compute_subboard_full(subboard):
+            log('ERROR: Subboard is full and cannot place!')
 
-        return pos
+        return generate_random_move(n)
 
     best_eval = NEG_INF if turn == PLAYER else POS_INF
     best_move_index = 0
@@ -281,7 +296,7 @@ def run_minimax(n, turn):
 def get_opponent_optimal_moves(board):
     moves = []
 
-    for pos, subboard in enumerate(board):
+    for pos, _ in enumerate(board):
         move = run_minimax(pos, OPPONENT)
         moves.append(move)
 
@@ -296,46 +311,109 @@ def make_move(n, pos, turn):
     global board_index
     global move_index
 
-    board[n][pos] = turn
-    board_index - pos
-    move_index += 1
+    if is_cell_empty(n, pos):
+        board[n][pos] = turn
+        board_index = pos
+        move_index += 1
+    else:
+        log('ERROR: Placed at non-empty cell')
+        log(f'n = {n}, pos = {pos}')
+        return generate_random_move(n)
 
 def decide_move(n, turn):
-    global board
-
-    preference = compute_preference(board)
-    opponent_moves = get_opponent_optimal_moves(board)
-
-    for pos, move in enumerate(opponent_moves):
-        if preference == move and is_cell_empty(n, pos):
-            return pos
-        
     return run_minimax(n, turn)
 
-def main():
-    global board
+#
+# Server
+#
+def parse(string):
     global board_index
-    global move_index
+
+    if '(' in string:
+        command, args = string.split('(')
+        args = args.split(')')[0]
+        args = args.split(',')
+    else:
+        command, args = string, []
+
+    if command == "second_move":
+        n = int(args[0])
+        pos = int(args[1])
+
+        n -= 1
+        pos -= 1
+
+        make_move(n, pos, OPPONENT)
+        move_pos = decide_move(n, pos)
+        log(f'move_pos: {move_pos}')
+        return move_pos + 1
     
-    for i, row in enumerate(board):
-        for j, cell in enumerate(row):
-            val = np.random.randint(0, 3)
-            if val > 0:
-                move_index += 1
-            board[i, j] = val
+    if command == "third_move":
+        n = int(args[0])
+        pos = int(args[1])
+        pos2 = int(args[2])
 
-    board_index = np.random.randint(0, 9)
+        n -= 1
+        pos -= 1
+        pos2 -= 1
 
-    print(f'board:\n{board}')
-    print(f'board_index: {board_index}')
-    print(f'move_index: {move_index}\n')
+        make_move(n, pos, PLAYER)
+        make_move(board_index, pos2, OPPONENT)
+        move_pos = decide_move(board_index, PLAYER)
+        log(f'move_pos: {move_pos}')
+        return move_pos + 1
+    
+    if command == "next_move":
+        pos = int(args[0])
 
-    pos = decide_move(board_index, PLAYER)
-    print(f'pos: {pos}\n')
+        pos -= 1
 
-    make_move(board_index, pos, PLAYER)
+        make_move(board_index, pos, OPPONENT)
+        move_pos = decide_move(board_index, PLAYER)
+        log(f'move_pos: {move_pos}')
+        return move_pos + 1
+    
+    if command == "win":
+        print("We won the game.")
+        return -1
+    
+    if command == "loss":
+        print("We lost the game")
+        return -1
+    
+    return 0
 
-    print(f'board after move: \n{board}')
+def listen(args):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    port = int(args.port)
+
+    s.connect(('localhost', port))
+
+    while True:
+        text = s.recv(1024).decode()
+        if not text:
+            continue
+
+        for line in text.split('\n'):
+            response = parse(line)
+
+            if response == -1:
+                s.close()
+                return
+            elif response > 0:
+                s.sendall((str(response) + '\n').encode())
+
+def start():
+    parser = argparse.ArgumentParser(prog = 'agent.py', \
+                                     description = 'comp3411 - assignment 3 - nine-board tic-tac-toe', \
+                                     epilog = 'author: mohammad mayaz rakib (z5361151)')
+    parser.add_argument('-p', '--port', required = True)
+    args = parser.parse_args()
+
+    listen(args)
+
+def main():
+    start()
 
 if __name__ == '__main__':
     main()
